@@ -46,7 +46,6 @@ class PostgresQueryInterface extends QueryInterface {
 
     const results = await Promise.all(promises);
     promises = [];
-    let enumIdx = 0;
 
     // This little function allows us to re-use the same code that prepends or appends new value to enum array
     const addEnumValue = (field, value, relativeValue, position = 'before', spliceStart = promises.length) => {
@@ -81,13 +80,16 @@ class PostgresQueryInterface extends QueryInterface {
         type instanceof DataTypes.ENUM ||
         type instanceof DataTypes.ARRAY && enumType instanceof DataTypes.ENUM //ARRAY sub type is ENUM
       ) {
-        // If the enum type doesn't exist then create it
-        if (!results[enumIdx]) {
+        // Search for an existing enum type with the same name
+        const existingEnum = results.find(result => result && result.enum_name === Utils.generateEnumName(tableName, field));
+
+        if (!existingEnum) {
+          // If the enum type doesn't exist then create it
           promises.push(() => {
             return this.sequelize.query(this.queryGenerator.pgEnum(tableName, field, enumType, options), { ...options, raw: true });
           });
-        } else if (!!results[enumIdx] && !!model) {
-          const enumVals = this.queryGenerator.fromArray(results[enumIdx].enum_value);
+        } else if (!!existingEnum && !!model) {
+          const enumVals = this.queryGenerator.fromArray(existingEnum.enum_value);
           const vals = enumType.values;
 
           // Going through already existing values allows us to make queries that depend on those values
@@ -130,8 +132,6 @@ class PostgresQueryInterface extends QueryInterface {
               addEnumValue(field, remainingEnumValues[reverseIdx], lastOldEnumValue, 'after');
             }
           }
-
-          enumIdx++;
         }
       }
     }
